@@ -1,13 +1,87 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl -w 
+
+package EmptySubclass;
 
 use Proc::Simple;
 
-package EmptySubclass;
-@ISA = qw(Proc::Simple);
+sub new() {
+    my $class = shift;
+    @ISA = qw(Proc::Simple);
+    bless {}, $class;
+}
+
 1;
 
 
 package Main;
+
+$| = 1;
+
+print "1..24\n";
+
+use Proc::Simple;
+
+###
+### Shell Process Test
+###
+$psh  = Proc::Simple->new();
+
+check($psh->start("sleep 2"));
+sleep(1);
+check($psh->poll());        # Must run
+
+sleep(2);
+check(!$psh->poll());       # Must have been terminated
+
+check($psh->start("sleep 10"));
+check($psh->kill());
+check(!$psh->poll());       # Must have been terminated
+
+
+###
+### Perl Subroutine Process Test
+###
+$psub = Proc::Simple->new();
+
+check($psub->start(sub { sleep 2 }));
+sleep(1);
+check($psub->poll());        # Must run
+
+sleep(2);
+check(!$psub->poll());       # Must have been terminated
+
+check($psub->start(sub { sleep 10 }));
+check($psub->kill("SIGTERM"));
+check(!$psub->poll());       # Must have been terminated
+
+
+###
+### Empty Subclass test
+###
+$psh  = EmptySubclass->new();
+check($psh->start("sleep 2"));
+sleep(1);
+check($psh->poll());        # Must run
+
+sleep(2);
+check(!$psh->poll());       # Must have been terminated
+
+check($psh->start("sleep 10"));
+check($psh->kill());
+check(!$psh->poll());       # Must have been terminated
+
+$psub  = EmptySubclass->new();
+check($psub->start(sub { sleep 2 }));
+sleep(1);
+check($psub->poll());        # Must run
+
+sleep(2);
+check(!$psub->poll());       # Must have been terminated
+
+check($psub->start(sub { sleep 10 }));
+check($psub->kill("SIGTERM"));
+check(!$psub->poll());       # Must have been terminated
+
 
 ###
 ### check(1) -> print #testno ok
@@ -21,47 +95,3 @@ sub check {
     $nu++;
 }
 
-$| = 1;
-
-print "1..10\n";
-
-###
-### Simple Test
-###
-
-### Shell commands
-
-$psh  = Proc::Simple->new();
-
-check($psh->start("sleep 0"));         # 1
-while($psh->poll) { 
-    sleep 1; }
-check(!$psh->poll());                  # 2 Must have been terminated
-
-check($psh->start("sleep 10"));        # 3
-while(!$psh->poll) { 
-    sleep 1; }
-check($psh->kill());                   # 4
-while($psh->poll) { 
-    sleep 1; }
-check(!$psh->poll());                  # 5 Must have been terminated
-
-
-### Perl subroutines
-$psub  = Proc::Simple->new();
-
-check($psub->start(sub { sleep 0 }));  # 6
-while($psub->poll) { 
-    sleep 1; }
-check(!$psub->poll());                 # 7 Must have been terminated
-
-check($psub->start(sub { sleep 10 })); # 8
-while(!$psub->poll) { 
-    sleep 1; }
-
-check($psub->kill("SIGTERM"));         # 9
-while($psub->poll) { 
-    sleep 1; }
-check(!$psub->poll());                 # 10 Must have been terminated
-
-1;

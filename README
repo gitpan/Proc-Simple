@@ -1,5 +1,5 @@
 
-Module:        Proc::Simple.pm    Version 1.12
+Module:        Proc::Simple.pm    Version 1.11
 
 Author:        Michael Schilli
 
@@ -32,14 +32,12 @@ Logic:
                $myproc->kill();                      # Terminate 
 
 
-Changes:       from 1.1:  Process is now called Proc::Simple to fit in the
-                          CPAN namespace, corrections Andreas Koenig suggested.
-               from 1.11: binkley's error: threw out waitpid, wait is
-			  performed by signal handler now.
+Changes:       from 1.1: Process is now called Proc::Simple to fit in the
+                         CPAN namespace, corrections Andreas Koenig suggested.
 
-Release Date:  96/05/22
+Release Date:  96/05/19
 
-Requirements:  Perl 5.002
+Requirements:  Just Perl 5
 
 
 Manpages:      Embedded in Proc/Simple.pm as usual:
