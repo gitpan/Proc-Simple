@@ -1,11 +1,14 @@
-MANIFEST
+Changes
+eg/parproc.pl
 Makefile.PL
+MANIFEST
+MANIFEST.SKIP
+META.yml			Module meta-data (added by MakeMaker)
 README
 Simple.pm
-t/simple.t
-t/mult.t
-t/muarg.t
-t/exit.t
-t/esub.t
 t/destroy.t
-eg/parproc.pl
+t/esub.t
+t/exit.t
+t/muarg.t
+t/mult.t
+t/simple.t
