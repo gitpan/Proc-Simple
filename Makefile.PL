@@ -2,7 +2,7 @@
 use ExtUtils::MakeMaker;
 
 WriteMakefile( 
-	'VERSION' => 1.11,
+	'VERSION' => 1.13,
 	'NAME'	  => 'Proc::Simple',
 	'dist' => { COMPRESS=>"gzip", SUFFIX=>"gz" },
 	);
