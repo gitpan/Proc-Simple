@@ -110,11 +110,12 @@ use strict;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXIT_STATUS 
             %DESTROYED);
 
+use IO::Handle;
 require Exporter;
 
 @ISA     = qw(Exporter AutoLoader);
 @EXPORT  = qw( );
-$VERSION = '1.20';
+$VERSION = '1.21';
 
 ######################################################################
 # Globals: Debug and the mysterious waitpid nohang constant.
@@ -157,6 +158,8 @@ sub new {
   $self->{'kill_on_destroy'}   = undef;
   $self->{'signal_on_destroy'} = undef;
   $self->{'pid'}               = undef;
+  $self->{'redirect_stdout'}   = undef;
+  $self->{'redirect_stderr'}   = undef;
 
   bless($self, $class);
 }
@@ -242,8 +245,20 @@ sub start {
 
   if($self->{pid} == 0) { # Child
 
+      if (defined $self->{'redirect_stderr'}) {
+        $self->dprt("STDERR -> $self->{'redirect_stderr'}");
+        open(STDERR, ">$self->{'redirect_stderr'}") ;
+        autoflush STDERR 1 ;
+      }
+
+      if (defined $self->{'redirect_stdout'}) {
+        $self->dprt("STDOUT -> $self->{'redirect_stdout'}");
+        open(STDOUT, ">$self->{'redirect_stdout'}") ;
+        autoflush STDOUT 1 ;
+      }
+
       if(ref($func) eq "CODE") {
-	  $func->(@params); exit 0;            # Start perl subroutine
+        $func->(@params); exit 0;            # Start perl subroutine
       } else {
           exec $func, @params;       # Start shell process
           exit 0;                    # In case something goes wrong
@@ -385,6 +400,36 @@ sub signal_on_destroy {
     my $self = shift;
     if (@_) { $self->{signal_on_destroy} = shift; }
     return $self->{signal_on_destroy};
+}
+
+######################################################################
+
+=item redirect_output
+
+This allows to redirect the stdout and/or stderr output to a file.
+Specify undef to leave th
+
+  # stdout to a file, left stderr unchanged
+  $proc->redirect_output ("/tmp/someapp.stdout", undef);
+  
+  # stderr to a file, left stdout unchanged
+  $proc->redirect_output (undef, "/tmp/someapp.stderr");
+  
+  # stdout and stderr to a separate file
+  $proc->redirect_output ("/tmp/someapp.stdout", "/tmp/someapp.stderr");
+
+Call this method before running the start method.
+
+=cut
+
+######################################################################
+sub redirect_output {
+######################################################################
+
+  my $self = shift ;
+  ($self->{'redirect_stdout'}, $self->{'redirect_stderr'}) = @_ ;
+
+  1 ;
 }
 
 ######################################################################
@@ -594,9 +639,11 @@ repeatedly with the I<poll> routine after sending the signal.
 I'd recommend using perl 5.6.0 although it might also run with 5.003
 -- if you don't have it, this is the time to upgrade!
 
-=head1 AUTHORS
+=head1 AUTHOR
 
 Michael Schilli <michael@perlmeister.com>
+
+Contributors:
 
 Tim Jenness  <t.jenness@jach.hawaii.edu>
    did kill_on_destroy/signal_on_destroy/pid
@@ -604,7 +651,8 @@ Tim Jenness  <t.jenness@jach.hawaii.edu>
 Mark R. Southern <mark_southern@merck.com>
    worked on EXIT_STATUS tracking
 
-=head1 THANKS TO
+Tobias Jahn <tjahn@users.sourceforge.net>
+   added redirection to stdout/stderr
 
 Clauss Strauch <Clauss_Strauch@aquila.fac.cs.cmu.edu>
 suggested the multi-arg start()-methods.
