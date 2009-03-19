@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Proc-Simple
-version:             1.23
+version:             1.24
 abstract:            ~
 license:             ~
 generated_by:        ExtUtils::MakeMaker version 6.31
