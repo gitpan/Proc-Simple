@@ -117,7 +117,7 @@ require Exporter;
 
 @ISA     = qw(Exporter AutoLoader);
 @EXPORT  = qw( );
-$VERSION = '1.26';
+$VERSION = '1.27';
 
 ######################################################################
 # Globals: Debug and the mysterious waitpid nohang constant.
@@ -411,7 +411,7 @@ sub signal_on_destroy {
 =item redirect_output
 
 This allows to redirect the stdout and/or stderr output to a file.
-Specify undef to leave th
+Specify undef to leave the stderr/stdout handles of the process alone.
 
   # stdout to a file, left stderr unchanged
   $proc->redirect_output ("/tmp/someapp.stdout", undef);
