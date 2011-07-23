@@ -112,12 +112,13 @@ use strict;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXIT_STATUS %INTERVAL
             %DESTROYED);
 
+use POSIX;
 use IO::Handle;
 require Exporter;
 
 @ISA     = qw(Exporter AutoLoader);
 @EXPORT  = qw( );
-$VERSION = '1.28';
+$VERSION = '1.29';
 
 ######################################################################
 # Globals: Debug and the mysterious waitpid nohang constant.
@@ -255,6 +256,10 @@ sub start {
         autoflush STDOUT 1 ;
       }
 
+        # Mark it as process group leader, so that we can kill
+        # the process group later.
+      POSIX::setsid();
+
       if(ref($func) eq "CODE") {
         $func->(@params); exit 0;            # Start perl subroutine
       } else {
@@ -339,16 +344,27 @@ sub kill {
   my $sig  = shift;
 
   # If no signal specified => SIGTERM-Signal
-  $sig = "SIGTERM" unless defined $sig;
+  $sig = POSIX::SIGTERM() unless defined $sig;
+
+  # Use numeric signal if we get a string 
+  if( $sig !~ /^[-\d]+$/ ) {
+      $sig =~ s/^SIG//g;
+      $sig = eval "POSIX::SIG${sig}()";
+  }
 
   # Process initialized at all?
   return 0 if !defined $self->{'pid'};
 
+  # kill process group instead of process to make sure that shell
+  # processes containing shell characters, which get launched via
+  # "sh -c" are killed along with their launching shells.
+  $sig = -$sig;
+
   # Send signal
   if(kill($sig, $self->{'pid'})) {
-      $self->dprt("KILL($self->{'pid'}) OK");
+      $self->dprt("KILL($sig, $self->{'pid'}) OK");
   } else {
-      $self->dprt("KILL($self->{'pid'}) failed");
+      $self->dprt("KILL($sig, $self->{'pid'}) failed");
       return 0;
   }
 
@@ -406,7 +422,7 @@ sub signal_on_destroy {
 
 =item redirect_output
 
-This allows to redirect the stdout and/or stderr output to a file.
+Redirects stdout and/or stderr output to a file.
 Specify undef to leave the stderr/stdout handles of the process alone.
 
   # stdout to a file, left stderr unchanged
@@ -747,6 +763,28 @@ signal really terminates a process. Processes can have signal
 handlers defined that avoid the shutdown.
 If in doubt, whether a process still exists, check it
 repeatedly with the I<poll> routine after sending the signal.
+
+=head1 Shell Processes
+
+If you pass a shell program to Proc::Simple, it'll use C<exec()> to 
+launch it. As noted in Perl's C<exec()> manpage, simple commands for
+the one-argument version of C<exec()> will be passed to 
+C<execvp()> directly, while commands containing characters
+like C<;> or C<*> will be passed to a shell to make sure those get
+the shell expansion treatment.
+
+This has the interesting side effect that if you launch something like
+
+    $p->start("./womper *");
+
+then you'll see two processes in your process list:
+
+    $ ps auxww | grep womper
+    mschilli  9126 11:21 0:00 sh -c ./womper *
+    mschilli  9127 11:21 0:00 /usr/local/bin/perl -w ./womper ...
+
+and Proc::Simple's C<kill()> method will only kill the first one
+(pid 9126).
 
 =head1 Contributors
 
