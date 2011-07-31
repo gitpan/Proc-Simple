@@ -118,7 +118,7 @@ require Exporter;
 
 @ISA     = qw(Exporter AutoLoader);
 @EXPORT  = qw( );
-$VERSION = '1.29';
+$VERSION = '1.30';
 
 ######################################################################
 # Globals: Debug and the mysterious waitpid nohang constant.
@@ -243,6 +243,15 @@ sub start {
   return 0 unless defined $self->{'pid'};  #   return Error if fork failed
 
   if($self->{pid} == 0) { # Child
+        # Mark it as process group leader, so that we can kill
+        # the process group later. Note that there's a race condition
+        # here because there's a window in time (while you're reading
+        # this comment) between child startup and its new process group 
+        # id being defined. This means that killpg() to the child during 
+        # this time frame will fail. Proc::Simple's kill() method deals l
+        # with it, see comments there.
+      POSIX::setsid();
+      $self->dprt("setsid called ($$)");
 
       if (defined $self->{'redirect_stderr'}) {
         $self->dprt("STDERR -> $self->{'redirect_stderr'}");
@@ -256,13 +265,11 @@ sub start {
         autoflush STDOUT 1 ;
       }
 
-        # Mark it as process group leader, so that we can kill
-        # the process group later.
-      POSIX::setsid();
-
       if(ref($func) eq "CODE") {
-        $func->(@params); exit 0;            # Start perl subroutine
+          $self->dprt("Launching code");
+          $func->(@params); exit 0;            # Start perl subroutine
       } else {
+          $self->dprt("Launching $func @params");
           exec $func, @params;       # Start shell process
           exit 0;                    # In case something goes wrong
       }
@@ -297,18 +304,20 @@ and returns I<1> if it is, I<0> if it's not.
 sub poll {
   my $self = shift;
 
+  $self->dprt("Polling");
+
   # There's some weirdness going on with the signal handler. 
   # It runs into timing problems, so let's have poll() call
   # the REAPER every time to make sure we're getting rid of 
   # defuncts.
   $self->THE_REAPER();
 
-  if(defined($self->{'pid'})) {
-      if(kill(0, $self->{'pid'})) {
-          $self->dprt("POLL($self->{'pid'}) RESPONDING");
-	      return 1;
+  if(defined($self->{pid})) {
+      if(CORE::kill(0, $self->{pid})) {
+          $self->dprt("POLL($self->{pid}) RESPONDING");
+          return 1;
       } else {
-          $self->dprt("POLL($self->{'pid'}) NOT RESPONDING");
+          $self->dprt("POLL($self->{pid}) NOT RESPONDING");
       }
   } else {
      $self->dprt("POLL(NOT DEFINED)");
@@ -353,7 +362,10 @@ sub kill {
   }
 
   # Process initialized at all?
-  return 0 if !defined $self->{'pid'};
+  if( !defined $self->{'pid'} ) {
+      $self->dprt("No pid set");
+      return 0;
+  }
 
   # kill process group instead of process to make sure that shell
   # processes containing shell characters, which get launched via
@@ -361,10 +373,17 @@ sub kill {
   $sig = -$sig;
 
   # Send signal
-  if(kill($sig, $self->{'pid'})) {
+  if(CORE::kill($sig, $self->{'pid'})) {
       $self->dprt("KILL($sig, $self->{'pid'}) OK");
   } else {
-      $self->dprt("KILL($sig, $self->{'pid'}) failed");
+      $self->dprt("KILL($sig, $self->{'pid'}) failed ($!)");
+        # Have we hit the race condition of a newly forked child
+        # that hasn't called setsid() yet? Call kill again with 
+        # a positive sig number.
+      if( $sig and $self->poll() ) {
+          $self->dprt("We've hit the race condition, using kill(+sig) instead");
+          return CORE::kill(-$sig, $self->{'pid'});
+      }
       return 0;
   }
 
@@ -652,7 +671,10 @@ sub THE_REAPER {
         
         foreach my $pid (keys %EXIT_STATUS) {
             dprt("", "Trying to reap $pid");
-            next if defined $EXIT_STATUS{$pid};
+            if( defined $EXIT_STATUS{$pid} ) {
+                dprt("", "exit status of $pid is defined - not reaping");
+                next;
+            }
             if(my $res = waitpid($pid, $WNOHANG) > 0) {
                 # We reaped a truly running process
                 $EXIT_STATUS{$pid} = $?;
@@ -665,6 +687,7 @@ sub THE_REAPER {
     } else { 
         # If we don't have $WNOHANG, we don't have a choice anyway.
         # Just reap everything.
+        dprt("", "reap everything for lack of WNOHANG");
         $child = CORE::wait();
         $EXIT_STATUS{$child} = $?;
         $INTERVAL{$child}{'t1'} = $now;
@@ -715,7 +738,11 @@ sub cleanup {
 ######################################################################
 sub dprt {
   my $self = shift;
-  print ref($self), "> @_\n" if $Debug;
+  if($Debug) {
+      require Time::HiRes;
+      my ($seconds, $microseconds) = Time::HiRes::gettimeofday();
+      print "[$seconds.$microseconds] ", ref($self), "> @_\n";
+  }
 }
 
 ######################################################################
@@ -783,8 +810,12 @@ then you'll see two processes in your process list:
     mschilli  9126 11:21 0:00 sh -c ./womper *
     mschilli  9127 11:21 0:00 /usr/local/bin/perl -w ./womper ...
 
-and Proc::Simple's C<kill()> method will only kill the first one
-(pid 9126).
+A regular C<kill()> on the process PID would only kill the first
+process, but Proc::Simple's C<kill()> will use a negative signal
+and send it to the first process (9126). Since it has marked the
+process as a process group leader when it created it previously
+(via setsid()), this will cause both processes above to receive the
+signal sent by C<kill()>.
 
 =head1 Contributors
 
