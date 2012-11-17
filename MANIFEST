@@ -18,3 +18,4 @@ t/simple.t
 t/stdouterr.t
 t/time.t
 t/wait.t
+META.json                                Module JSON meta-data (added by MakeMaker)
